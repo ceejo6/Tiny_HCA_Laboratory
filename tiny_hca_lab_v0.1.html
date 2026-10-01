@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Tiny HCA Laboratory v0.1</title>
+    <style>
+        body {
+            font-family: system-ui;
+            margin: 0;
+            background: #111;
+            color: #eee
+        }
+
+        header {
+            padding: 14px 18px;
+            border-bottom: 1px solid #333
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 20px
+        }
+
+        .sub {
+            color: #aaa;
+            font-size: 13px
+        }
+
+        main {
+            display: flex;
+            gap: 14px;
+            padding: 14px;
+            flex-wrap: wrap
+        }
+
+        .panel {
+            background: #181818;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 12px
+        }
+
+        canvas {
+            background: #080808;
+            border: 1px solid #444;
+            image-rendering: pixelated;
+            touch-action: none
+        }
+
+        button,
+        input {
+            font: inherit;
+            margin: 3px;
+            padding: 6px
+        }
+
+        .stats {
+            font-family: monospace;
+            margin-top: 8px;
+            color: #bbb
+        }
+
+        .note {
+            max-width: 340px;
+            line-height: 1.4;
+            color: #bbb;
+            font-size: 13px
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Tiny HCA Laboratory v0.1</h1>
+        <div class="sub">Conway's Game of Life — reproducible pattern experiments</div>
+    </header>
+    <main>
+        <section class="panel"><canvas id="grid" width="720" height="540"></canvas>
+            <div><button onclick="step()">Step</button><button onclick="toggleRun()" id="run">Run</button><button
+                    onclick="reset()">Reset</button><button onclick="clearGrid()">Clear</button></div>
+            <div class="stats" id="stats"></div>
+        </section>
+        <section class="panel"><b>Pattern controls</b><br><button onclick="savePattern()">Save pattern</button><button
+                onclick="loadPattern()">Load pattern</button><button onclick="exportPattern()">Export
+                text</button><button onclick="importPattern()">Import text</button>
+            <hr>Cell size: <input id="cellSize" type="number" min="6" max="36" value="18" onchange="resizeCanvas()">
+            <p class="note">Click cells to toggle them. Everything is deterministic: the saved initial configuration is
+                enough to reproduce an experiment.</p>
+            <p class="note">Workflow: build → save → step → record generation/population → reset → change one variable.
+            </p>
+        </section>
+    </main>
+    <script>let cell = 18, cols = 40, rows = 30, grid = [], initial = [], generation = 0, running = false, timer = null; const canvas = document.getElementById('grid'), ctx = canvas.getContext('2d'); function blank() { return Array.from({ length: rows }, () => Array(cols).fill(false)) } function init() { grid = blank(); initial = grid.map(r => r.slice()); draw() } function resizeCanvas() { cell = Math.max(6, Math.min(36, Number(document.getElementById('cellSize').value) || 18)); cols = Math.floor(canvas.width / cell); rows = Math.floor(canvas.height / cell); let old = grid; grid = blank(); for (let y = 0; y < Math.min(rows, old.length); y++)for (let x = 0; x < Math.min(cols, old[0]?.length || 0); x++)grid[y][x] = old[y][x]; draw() } function draw() { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.strokeStyle = '#222'; for (let x = 0; x <= cols; x++) { ctx.beginPath(); ctx.moveTo(x * cell + .5, 0); ctx.lineTo(x * cell + .5, rows * cell); ctx.stroke() } for (let y = 0; y <= rows; y++) { ctx.beginPath(); ctx.moveTo(0, y * cell + .5); ctx.lineTo(cols * cell, y * cell + .5); ctx.stroke() } ctx.fillStyle = '#eee'; for (let y = 0; y < rows; y++)for (let x = 0; x < cols; x++)if (grid[y][x]) ctx.fillRect(x * cell + 2, y * cell + 2, cell - 3, cell - 3); document.getElementById('stats').textContent = `Generation: ${generation}   Population: ${grid.flat().filter(Boolean).length}` } function step() { let n = blank(); for (let y = 0; y < rows; y++)for (let x = 0; x < cols; x++) { let c = 0; for (let dy = -1; dy <= 1; dy++)for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; let yy = y + dy, xx = x + dx; if (yy >= 0 && yy < rows && xx >= 0 && xx < cols && grid[yy][xx]) c++ } n[y][x] = (grid[y][x] && (c === 2 || c === 3)) || (!grid[y][x] && c === 3) } grid = n; generation++; draw() } function toggleRun() { running = !running; document.getElementById('run').textContent = running ? 'Pause' : 'Run'; if (running) timer = setInterval(step, 100); else clearInterval(timer) } function reset() { running = false; clearInterval(timer); grid = initial.map(r => r.slice()); generation = 0; document.getElementById('run').textContent = 'Run'; draw() } function clearGrid() { grid = blank(); initial = grid.map(r => r.slice()); generation = 0; draw() } canvas.addEventListener('pointerdown', e => { let r = canvas.getBoundingClientRect(), x = Math.floor((e.clientX - r.left) / cell), y = Math.floor((e.clientY - r.top) / cell); if (x >= 0 && x < cols && y >= 0 && y < rows) { grid[y][x] = !grid[y][x]; draw() } }); function savePattern() { initial = grid.map(r => r.slice()); generation = 0; localStorage.setItem('hcaPattern', JSON.stringify(initial)); alert('Pattern saved. Reset returns here.') } function loadPattern() { let s = localStorage.getItem('hcaPattern'); if (!s) return alert('No stored pattern.'); grid = JSON.parse(s); initial = grid.map(r => r.slice()); generation = 0; draw() } function exportPattern() { let lines = grid.map(r => r.map(v => v ? '#' : '.').join('')).join('\n'); navigator.clipboard?.writeText(lines); alert(lines) } function importPattern() { let s = prompt('Paste # for live cells and . for dead cells:'); if (!s) return; let lines = s.trim().split(/\n/); grid = blank(); for (let y = 0; y < Math.min(rows, lines.length); y++)for (let x = 0; x < Math.min(cols, lines[y].length); x++)grid[y][x] = lines[y][x] === '#'; initial = grid.map(r => r.slice()); generation = 0; draw() } init();</script>
+</body>
+
+</html>
